@@ -1,0 +1,18 @@
+# C/C++ Derleme Çıktıları
+*.o
+*.out
+*.exe
+
+# Bizim Makefile Çıktıları
+regex_engine
+test_runner
+
+# İşletim Sistemi Artıkları
+.DS_Store
+Thumbs.db
+
+# IDE ve Editör Klasörleri (VS Code, CLion, Vim vb.)
+.vscode/
+.idea/
+*.swp
+*.swo
