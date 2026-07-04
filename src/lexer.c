@@ -8,7 +8,7 @@ void initLexer(LexerContext* lexer, const char* input) {
     lexer->length = strlen(input);
 }
 
-// Metindeki sıradaki karakteri okuyarak ilgili token'ı oluşturur ve döndürür.
+// Metndeki sıradaki karakteri okuyarak ilgili token'ı oluşturur ve döndürür.
 Token getNextToken(LexerContext* lexer) {
     Token token;
     token.value = '\0';
@@ -24,6 +24,9 @@ Token getNextToken(LexerContext* lexer) {
     switch (currentChar) {
         case '*':
             token.type = tokenStar;
+            break;
+        case '+':
+            token.type = tokenPlus;
             break;
         case '|':
             token.type = tokenPipe;

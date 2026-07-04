@@ -60,7 +60,7 @@ static Fragment parseAtom(NfaContext* ctx, LexerContext* lexer) {
     return f;
 }
 
-// '*' (Sıfır veya daha fazla) operatörünü işler
+// '*' ve '+' gibi tekrar operatörlerini işler
 static Fragment parseRepetition(NfaContext* ctx, LexerContext* lexer) {
     Fragment f = parseAtom(ctx, lexer);
     
@@ -68,17 +68,30 @@ static Fragment parseRepetition(NfaContext* ctx, LexerContext* lexer) {
     if (peek.type == tokenStar) {
         getNextToken(lexer); // '*' sembolünü tüket
         
-        // Döngü ve atlama yolları için Split düğümü
+        // Döngü ve atlama yolları için baştan Split düğümü
         State* split = createState(ctx, stateSplit, '\0', f.start, NULL);
-        f.end->out = split; // Parçanın sonu başa döner
+        f.end->out = split; 
         
-        // Sonrasında diğer düğümlere sorunsuz bağlanabilmesi için çıkış hunisi
         State* funnel = createEpsilon(ctx);
-        split->out1 = funnel; // Yıldızın "hiç eşleşmeme" durumu funnel'a atlar
+        split->out1 = funnel; 
         
         f.start = split;
         f.end = funnel;
+    } 
+    else if (peek.type == tokenPlus) {
+        getNextToken(lexer); // '+' sembolünü tüket
+        
+        // En az 1 kez çalışması için dallanmayı sona koyar
+        State* split = createState(ctx, stateSplit, '\0', f.start, NULL);
+        f.end->out = split; 
+        
+        State* funnel = createEpsilon(ctx);
+        split->out1 = funnel;
+        
+        // Başlangıç aynı kalır, bitiş olur
+        f.end = funnel;
     }
+    
     return f;
 }
 
@@ -88,12 +101,10 @@ static Fragment parseConcat(NfaContext* ctx, LexerContext* lexer) {
     
     while (1) {
         Token peek = peekToken(lexer);
-        // Cümleyi bitiren bir sembol gelirse birleştirmeyi durdur
         if (peek.type == tokenEof || peek.type == tokenPipe || peek.type == tokenRparen) {
             break;
         }
         
-        // Sonraki parçayı al ve mevcut parçanın sonuna bağla
         Fragment next = parseRepetition(ctx, lexer);
         f.end->out = next.start;
         f.end = next.end;
@@ -112,11 +123,9 @@ static Fragment parseExpression(NfaContext* ctx, LexerContext* lexer) {
             
             Fragment right = parseConcat(ctx, lexer);
             
-            // İki yolu da deneyen bir başlangıç noktası oluştur
             State* split = createState(ctx, stateSplit, '\0', f.start, right.start);
-            
-            // İki yolun da sonunda buluşacağı bir çıkış noktası oluştur
             State* funnel = createEpsilon(ctx);
+            
             f.end->out = funnel;
             right.end->out = funnel;
             
@@ -139,16 +148,14 @@ NfaContext* createNfa(const char* regexPattern) {
     LexerContext lexer;
     initLexer(&lexer, regexPattern);
 
-    // NFA'nın gövdesini inşa et
     Fragment f = parseExpression(ctx, &lexer);
 
-    // Sistemin sonuna başarılı eşleşme durumunu ekle
     State* matchState = createState(ctx, stateMatch, '\0', NULL, NULL);
     if (f.end != NULL) {
         f.end->out = matchState;
         ctx->startState = f.start;
     } else {
-        ctx->startState = matchState; // Boş desen durumu
+        ctx->startState = matchState;
     }
 
     return ctx;

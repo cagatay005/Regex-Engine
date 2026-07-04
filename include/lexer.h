@@ -4,30 +4,34 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// Lexer'ın okuyabileceği sembol tiplerini belirler
 typedef enum {
     tokenChar,
     tokenStar,
+    tokenPlus, 
     tokenPipe,
     tokenLparen,
     tokenRparen,
     tokenEof
 } TokenType;
 
+// Tek bir sembolü ve gerekirse harf değerini tutar
 typedef struct {
     TokenType type;
-    char value; // Sadece tokenChar için anlamlıdır
+    char value; 
 } Token;
 
+// Lexer'ın metin üzerindeki anlık durumunu tutar
 typedef struct {
     const char* input;
     size_t position;
     size_t length;
 } LexerContext;
 
-// Lexer durumunu varsayılan değerlerle başlatır
+// Lexer yapısının başlangıç değerlerini atar
 void initLexer(LexerContext* lexer, const char* input);
 
-// Metindeki sıradaki karakteri ayrıştırıp ilgili token yapısını döndürür
+// Metndeki sıradaki karakteri okuyarak ilgili token'ı oluşturur ve döndürür
 Token getNextToken(LexerContext* lexer);
 
 #endif
