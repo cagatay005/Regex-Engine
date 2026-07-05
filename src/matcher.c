@@ -21,6 +21,14 @@ static bool checkState(State* state, const char* text) {
         return false;
     }
 
+    // Nokta (.) Operatörü: Yeni satır (\n) hariç her şeyle eşleşir
+    if (state->type == stateAny) {
+        if (*text != '\0' && *text != '\n') {
+            return checkState(state->out, text + 1);
+        }
+        return false;
+    }
+
     // Küme eşleşmesi gerektiren bir durumdaysa
     if (state->type == stateClass) {
         if (*text != '\0') {

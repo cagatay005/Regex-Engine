@@ -17,6 +17,7 @@ typedef enum {
     tokenLbrace,
     tokenRbrace,
     tokenClass,
+    tokenDot,
     tokenEof
 } TokenType;
 

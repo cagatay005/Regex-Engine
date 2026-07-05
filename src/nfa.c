@@ -72,6 +72,11 @@ static Fragment parseAtom(NfaContext* ctx, LexerContext* lexer) {
         State* s = createClassState(ctx, token.classMask, token.isNegativeClass, NULL);
         f.start = s;
         f.end = s;
+    } else if (peek.type == tokenDot) {
+        getNextToken(lexer); // Nokta token'ını tüket
+        State* s = createState(ctx, stateAny, '\0', NULL, NULL); // Yeni düğümü yarat
+        f.start = s;
+        f.end = s;
     }
         
     return f;

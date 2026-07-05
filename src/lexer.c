@@ -170,6 +170,46 @@ Token getNextToken(LexerContext* lexer) {
                 lexer->position++;
             }
             break;
+        case '.':
+            token.type = tokenDot;
+            break;
+        case '\\': // Kaçış karakteri yakalandı
+            if (lexer->position < lexer->length) {
+                char nextChar = lexer->input[lexer->position++];
+                
+                // Özel kaçış dizileri (\d, \w, \s) -> Doğrudan Kümeye çevirir
+                if (nextChar == 'd' || nextChar == 'w' || nextChar == 's') {
+                    token.type = tokenClass;
+                    memset(token.classMask, 0, 256);
+                    token.isNegativeClass = false;
+                    
+                    if (nextChar == 'd') { // Rakamlar
+                        for (int i = '0'; i <= '9'; i++) token.classMask[i] = true;
+                    } else if (nextChar == 'w') { // Kelime karakterleri (Harf, rakam ve altçizgi)
+                        for (int i = 'a'; i <= 'z'; i++) token.classMask[i] = true;
+                        for (int i = 'A'; i <= 'Z'; i++) token.classMask[i] = true;
+                        for (int i = '0'; i <= '9'; i++) token.classMask[i] = true;
+                        token.classMask['_'] = true;
+                    } else if (nextChar == 's') { // Boşluk karakterleri
+                        token.classMask[' '] = true;
+                        token.classMask['\t'] = true;
+                        token.classMask['\n'] = true;
+                        token.classMask['\r'] = true;
+                        token.classMask['\v'] = true;
+                        token.classMask['\f'] = true;
+                    }
+                } else {
+                    // Gerçek operatör karakterini arama (\*, \|, \. vb.)
+                    // Slash'i yut, sadece sağındaki karakteri normal harfmiş gibi döndür
+                    token.type = tokenChar;
+                    token.value = nextChar;
+                }
+            } else {
+                // Metnin en sonunda tek başına '\' kaldıysa normal karakter say
+                token.type = tokenChar;
+                token.value = '\\';
+            }
+            break;
         default:
             token.type = tokenChar;
             token.value = currentChar;
