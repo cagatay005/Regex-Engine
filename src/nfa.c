@@ -46,14 +46,16 @@ static State* createEpsilon(NfaContext* ctx) {
 
 // Parantez içi ifadeleri veya tek bir karakteri ayrıştırır
 static Fragment parseAtom(NfaContext* ctx, LexerContext* lexer) {
-    Token token = getNextToken(lexer);
+    Token peek = peekToken(lexer);
     Fragment f = {NULL, NULL};
     
-    if (token.type == tokenChar) {
+    if (peek.type == tokenChar) {
+        Token token = getNextToken(lexer); // Karakteri güvenle tüket
         State* s = createState(ctx, stateChar, token.value, NULL, NULL);
         f.start = s;
         f.end = s;
-    } else if (token.type == tokenLparen) {
+    } else if (peek.type == tokenLparen) {
+        getNextToken(lexer); // '(' sembolünü tüket
         f = parseExpression(ctx, lexer);
         getNextToken(lexer); // ')' sembolünü tüket
     }
@@ -91,6 +93,20 @@ static Fragment parseRepetition(NfaContext* ctx, LexerContext* lexer) {
         // Başlangıç aynı kalır, bitiş olur
         f.end = funnel;
     }
+
+    else if (peek.type == tokenQuestion) {
+        getNextToken(lexer); // '?' sembolünü tüket
+        
+        // Parçaya girme veya tamamen atlama kararı
+        State* split = createState(ctx, stateSplit, '\0', f.start, NULL);
+        State* funnel = createEpsilon(ctx);
+        
+        f.end->out = funnel;   // Parça işlenirse funnel'a çıkar
+        split->out1 = funnel;  // Parça atlanırsa doğrudan funnel'a çıkar
+        
+        f.start = split;
+        f.end = funnel;
+    }
     
     return f;
 }
@@ -119,15 +135,19 @@ static Fragment parseExpression(NfaContext* ctx, LexerContext* lexer) {
     while (1) {
         Token peek = peekToken(lexer);
         if (peek.type == tokenPipe) {
-            getNextToken(lexer); // '|' sembolünü tüket
+            getNextToken(lexer); 
             
             Fragment right = parseConcat(ctx, lexer);
             
             State* split = createState(ctx, stateSplit, '\0', f.start, right.start);
             State* funnel = createEpsilon(ctx);
             
-            f.end->out = funnel;
-            right.end->out = funnel;
+            // BOŞ FRAGMENT (NULL) KONTROLLERİ
+            if (f.end != NULL) f.end->out = funnel;
+            else split->out = funnel;
+            
+            if (right.end != NULL) right.end->out = funnel;
+            else split->out1 = funnel;
             
             f.start = split;
             f.end = funnel;

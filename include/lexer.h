@@ -8,10 +8,13 @@
 typedef enum {
     tokenChar,
     tokenStar,
-    tokenPlus, 
+    tokenPlus,
+    tokenQuestion,
     tokenPipe,
     tokenLparen,
     tokenRparen,
+    tokenLbrace,
+    tokenRbrace,
     tokenEof
 } TokenType;
 

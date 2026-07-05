@@ -20,7 +20,7 @@ int main() {
     char regexPattern[256];
     char text[256];
 
-    // Terminali Matrix yeşiline boyayalım ve bir başlık
+    // Terminal boyama ve baslik
     printf("%s", COLOR_MATRIX_GREEN);
     printf("==========================================\n");
     printf("               REGEX ENGINE\n");
