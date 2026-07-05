@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 // Lexer'ın okuyabileceği sembol tiplerini belirler
 typedef enum {
@@ -15,13 +16,16 @@ typedef enum {
     tokenRparen,
     tokenLbrace,
     tokenRbrace,
+    tokenClass,
     tokenEof
 } TokenType;
 
 // Tek bir sembolü ve gerekirse harf değerini tutar
 typedef struct {
     TokenType type;
-    char value; 
+    char value;
+    bool classMask[256];
+    bool isNegativeClass;
 } Token;
 
 // Lexer'ın metin üzerindeki anlık durumunu tutar

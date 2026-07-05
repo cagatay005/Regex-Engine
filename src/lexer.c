@@ -138,6 +138,38 @@ Token getNextToken(LexerContext* lexer) {
         case ')':
             token.type = tokenRparen;
             break;
+        case '[':
+            token.type = tokenClass;
+            memset(token.classMask, 0, 256); // Haritayı sıfırla
+            token.isNegativeClass = false;
+
+            // Negatif küme kontrolü [^...]
+            if (lexer->position < lexer->length && lexer->input[lexer->position] == '^') {
+                token.isNegativeClass = true;
+                lexer->position++;
+            }
+
+            // ']' görene kadar oku
+            while (lexer->position < lexer->length && lexer->input[lexer->position] != ']') {
+                char c = lexer->input[lexer->position++];
+                
+                // Aralık kontrolü (Örn: a-z veya 0-9)
+                if (lexer->position < lexer->length && lexer->input[lexer->position] == '-' &&
+                    lexer->position + 1 < lexer->length && lexer->input[lexer->position + 1] != ']') {
+                    lexer->position++; // '-' işaretini atla
+                    char endC = lexer->input[lexer->position++];
+                    for (int i = c; i <= endC; i++) {
+                        token.classMask[i] = true; // Aralıktaki tüm harfleri haritada işaretle
+                    }
+                } else {
+                    token.classMask[(unsigned char)c] = true; // Tekil harfi işaretle
+                }
+            }
+            // ']' işaretini tüket
+            if (lexer->position < lexer->length && lexer->input[lexer->position] == ']') {
+                lexer->position++;
+            }
+            break;
         default:
             token.type = tokenChar;
             token.value = currentChar;

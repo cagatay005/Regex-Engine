@@ -1,5 +1,6 @@
 #include "nfa.h"
 #include <stdlib.h>
+#include <string.h>
 
 // Bir NFA parçasının başlangıç ve bitiş düğümlerini tutar
 typedef struct {
@@ -44,6 +45,14 @@ static State* createEpsilon(NfaContext* ctx) {
     return createState(ctx, stateSplit, '\0', NULL, NULL);
 }
 
+// Küme düğümü oluşturur
+static State* createClassState(NfaContext* ctx, bool* classMask, bool isNegativeClass, State* out) {
+    State* state = createState(ctx, stateClass, '\0', out, NULL);
+    memcpy(state->classMask, classMask, 256);
+    state->isNegativeClass = isNegativeClass;
+    return state;
+}
+
 // Parantez içi ifadeleri veya tek bir karakteri ayrıştırır
 static Fragment parseAtom(NfaContext* ctx, LexerContext* lexer) {
     Token peek = peekToken(lexer);
@@ -58,7 +67,13 @@ static Fragment parseAtom(NfaContext* ctx, LexerContext* lexer) {
         getNextToken(lexer); // '(' sembolünü tüket
         f = parseExpression(ctx, lexer);
         getNextToken(lexer); // ')' sembolünü tüket
+    } else if (peek.type == tokenClass) {
+        Token token = getNextToken(lexer); // Küme token'ını tüket
+        State* s = createClassState(ctx, token.classMask, token.isNegativeClass, NULL);
+        f.start = s;
+        f.end = s;
     }
+        
     return f;
 }
 

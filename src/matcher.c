@@ -21,6 +21,24 @@ static bool checkState(State* state, const char* text) {
         return false;
     }
 
+    // Küme eşleşmesi gerektiren bir durumdaysa
+    if (state->type == stateClass) {
+        if (*text != '\0') {
+            unsigned char c = (unsigned char)(*text);
+            bool isMatch = state->classMask[c]; // Karakter haritada var mı
+            
+            // Eğer negatif kümeyse [^...] sonucu tersine çevir
+            if (state->isNegativeClass) {
+                isMatch = !isMatch;
+            }
+            
+            if (isMatch) {
+                return checkState(state->out, text + 1);
+            }
+        }
+        return false;
+    }
+
     // İleride eklenecek olan dallanma (|) durumu için iki yolu da dene
     if (state->type == stateSplit) {
         return checkState(state->out, text) || checkState(state->out1, text);

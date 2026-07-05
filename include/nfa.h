@@ -8,13 +8,16 @@
 typedef enum {
     stateChar,
     stateSplit,
-    stateMatch
+    stateMatch,
+    stateClass
 } StateType;
 
 // NFA grafi uzerindeki tek bir baglanti noktasini temsil eder
 typedef struct State {
     StateType type;
     char value;          // type stateChar ise aranacak karakteri tutar
+    bool classMask[256]; // kümeye dahil olan karakterler
+    bool isNegativeClass; // negatif küme bayrağı
     struct State* out;   // Birinci cikis durumunu gosterir
     struct State* out1;  // Ikinci cikis durumunu gosterir
     int lastListId;      // NFA gezinmesinde ayni dugume tekrar girilmesini onler
