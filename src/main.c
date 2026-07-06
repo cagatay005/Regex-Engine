@@ -15,11 +15,9 @@
     #define clear_screen() system("clear")
 #endif
 
-// ANSI Renk Kodları (Matrix Yeşili)
 #define COLOR_GREEN "\033[1;32m"
 #define COLOR_RESET "\033[0m"
 
-// Dil seçeneğini tutan global değişken
 bool isEnglish = false;
 
 // Uygulama başlığını ekrana basan fonksiyon
@@ -55,7 +53,6 @@ int main() {
     printHeader();
 
     while (1) {
-        // Artık çok daha sade bir giriş mesajımız var
         if (isEnglish) {
             printf("\nEnter Regex ('code' for cmds): ");
         } else {
@@ -65,7 +62,7 @@ int main() {
         if (fgets(regexPattern, sizeof(regexPattern), stdin) == NULL) break;
         regexPattern[strcspn(regexPattern, "\n")] = 0; 
 
-        // 1. KOMUT: Çıkış (Quit)
+        // Çıkış Komutu
         if (strcmp(regexPattern, "q") == 0) {
             if (isEnglish) {
                 printf("\nExiting system...\n");
@@ -76,27 +73,27 @@ int main() {
             break;          
         }
 
-        // 2. KOMUT: Ekranı Temizle (Clear)
+        // Ekranı Temizle Komutu
         if (strcmp(regexPattern, "clear") == 0) {
             printHeader();
             continue; 
         }
 
-        // 3. KOMUT: İngilizceye Geç (en)
+        // Ingilizceye Geç Komutu
         if (strcmp(regexPattern, "en") == 0) {
             isEnglish = true;
             printf(">>> Language changed to English.\n");
             continue;
         }
 
-        // 4. KOMUT: Türkçeye Geç (tr)
+        // Türkçeye Geç Komutu
         if (strcmp(regexPattern, "tr") == 0) {
             isEnglish = false;
             printf(">>> Dil Turkce olarak degistirildi.\n");
             continue;
         }
 
-        // 5. KOMUT: Komutları Listele (code)
+        // Komutları Listele Komutu
         if (strcmp(regexPattern, "code") == 0) {
             printCommands();
             continue;
