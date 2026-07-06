@@ -1,70 +1,78 @@
 #include "nfa.h"
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
+#include <stdio.h>
 
-// Aynı anda üzerinde bulunduğumuz düğümleri tutacak liste
+// Her bir paralel klonun taşıyacağı iş parçacığı yapısı
 typedef struct {
-    State** states;
+    State* state;
+    const char* captures[MAX_CAPTURES]; // Klonun sırtındaki hafıza çantası
+} Thread;
+
+typedef struct {
+    Thread* threads;
     int count;
     int capacity;
-} StateList;
+} ThreadList;
 
-static int listIdCounter = 0; // Sonsuz döngü engelliyici ID
+static int listIdCounter = 0;
 
-// Yeni liste oluşturur
-static StateList* createList(int capacity) {
-    StateList* l = (StateList*)malloc(sizeof(StateList));
-    l->states = (State**)malloc(capacity * sizeof(State*));
+static ThreadList* createList(int capacity) {
+    ThreadList* l = (ThreadList*)malloc(sizeof(ThreadList));
+    l->threads = (Thread*)malloc(capacity * sizeof(Thread));
     l->count = 0;
     l->capacity = capacity;
     return l;
 }
 
-// Listeyi bellekten siler
-static void freeList(StateList* l) {
-    free(l->states);
+static void freeList(ThreadList* l) {
+    free(l->threads);
     free(l);
 }
 
-// Epsilon yolları tüketerek gidilebilecek tüm aktif düğümleri listeye ekler
-static void addState(StateList* l, State* s, int listId, const char* text, const char* textStart) {
-    // Düğüm boşsa veya bu adımda zaten listeye eklendiyse atla (sonsuz döngü engeli)
+// Yeni bir düğümü (ve klonun o anki çantasını) listeye ekler
+static void addThread(ThreadList* l, State* s, const char** captures, int listId, const char* text, const char* textStart) {
     if (s == NULL || s->lastListId == listId) return;
     s->lastListId = listId;
 
     if (s->type == stateSplit) {
-        // İki yola birden aynı anda gir
-        addState(l, s->out, listId, text, textStart);
-        addState(l, s->out1, listId, text, textStart);
+        addThread(l, s->out, captures, listId, text, textStart);
+        addThread(l, s->out1, captures, listId, text, textStart);
+        return;
+    }
+
+    // Klonun çantasını kopyala, yeni adresi not al ve Epsilon gibi devam et
+    if (s->type == stateSave) {
+        const char* oldCaptures[MAX_CAPTURES];
+        memcpy(oldCaptures, captures, sizeof(const char*) * MAX_CAPTURES);
+        oldCaptures[s->saveId] = text; 
+        addThread(l, s->out, oldCaptures, listId, text, textStart);
         return;
     }
 
     if (s->type == stateAnchorStart) {
-        if (text == textStart) addState(l, s->out, listId, text, textStart);
+        if (text == textStart) addThread(l, s->out, captures, listId, text, textStart);
         return;
     }
-
     if (s->type == stateAnchorEnd) {
-        if (*text == '\0' || *text == '\n') addState(l, s->out, listId, text, textStart);
+        if (*text == '\0' || *text == '\n') addThread(l, s->out, captures, listId, text, textStart);
         return;
     }
 
-    // Karakter tüketecek standart düğümü listeye kaydet
     if (l->count >= l->capacity) {
         l->capacity *= 2;
-        l->states = (State**)realloc(l->states, l->capacity * sizeof(State*));
+        l->threads = (Thread*)realloc(l->threads, l->capacity * sizeof(Thread));
     }
-    l->states[l->count++] = s;
+    l->threads[l->count].state = s;
+    // Çantayı klonla
+    memcpy(l->threads[l->count].captures, captures, sizeof(const char*) * MAX_CAPTURES);
+    l->count++;
 }
 
-// Karakter eşleşme kuralları
 static bool isMatch(State* state, const char* text) {
-    if (state->type == stateChar) {
-        return (*text != '\0' && *text == state->value);
-    }
-    if (state->type == stateAny) {
-        return (*text != '\0' && *text != '\n');
-    }
+    if (state->type == stateChar) return (*text != '\0' && *text == state->value);
+    if (state->type == stateAny) return (*text != '\0' && *text != '\n');
     if (state->type == stateClass) {
         if (*text != '\0') {
             unsigned char c = (unsigned char)(*text);
@@ -75,73 +83,78 @@ static bool isMatch(State* state, const char* text) {
     return false;
 }
 
-// Belirli bir metin başlangıcı için State-Set Simülasyonunu çalıştırır
 static bool checkStateSet(NfaContext* ctx, const char* text, const char* textStart) {
-    // Geçerli adım ve bir sonraki adımın durum listeleri
-    StateList* clist = createList(ctx->stateCount > 0 ? ctx->stateCount : 16);
-    StateList* nlist = createList(ctx->stateCount > 0 ? ctx->stateCount : 16);
+    ThreadList* clist = createList(ctx->stateCount > 0 ? ctx->stateCount : 16);
+    ThreadList* nlist = createList(ctx->stateCount > 0 ? ctx->stateCount : 16);
 
     const char* current = text;
     listIdCounter++;
     
-    // Ağacın başından başla ve tüm paralel yolları listeye yükle
-    addState(clist, ctx->startState, listIdCounter, current, textStart);
+    // Tertemiz, boş bir hafıza çantasıyla ilk klonu başlatır
+    const char* initialCaptures[MAX_CAPTURES] = {NULL};
+    addThread(clist, ctx->startState, initialCaptures, listIdCounter, current, textStart);
 
     bool matched = false;
+    Thread* winningThread = NULL;
 
-    // Aktif bir yol olduğu sürece ilerle
     while (clist->count > 0) {
         listIdCounter++;
         nlist->count = 0;
 
         for (int i = 0; i < clist->count; i++) {
-            State* s = clist->states[i];
+            Thread* t = &clist->threads[i];
             
-            if (s->type == stateMatch) {
+            // Eşleşme bulunsa dahi döngü kırma
+            // O anki en uzun/en iyi eşleşmeyi winningThread'e kaydet, 
+            // ama diğer klonların daha uzun bir eşleşme bulma ihtimaline karşı çalışmaya devam et.
+            if (t->state->type == stateMatch) {
                 matched = true;
-                goto end; // Başarılı döngüyü kır
+                // Kazanan thread'in hafızasını statik bir yere kopyala ki döngü devam edince kaybolmasın
+                static Thread bestMatch; 
+                bestMatch.state = t->state;
+                memcpy(bestMatch.captures, t->captures, sizeof(const char*) * MAX_CAPTURES);
+                winningThread = &bestMatch;
+                continue; // Bu klon hedefe ulaştı, ama diğer klonlar ilerlemeye devam eder
             }
             
-            // Eğer karakter kurallara uyuyorsa, hedefteki yeni düğümleri sonraki listeye aktar
-            if (isMatch(s, current)) {
-                addState(nlist, s->out, listIdCounter, current + 1, textStart);
+            if (isMatch(t->state, current)) {
+                addThread(nlist, t->state->out, t->captures, listIdCounter, current + 1, textStart);
             }
         }
 
-        if (nlist->count == 0) break; // İlerleyecek yol kalmadıysa dur
-
-        // Listeleri takas et (Yeni liste artık aktif liste oldu)
-        StateList* temp = clist;
-        clist = nlist;
-        nlist = temp;
-
+        if (nlist->count == 0) break;
+        ThreadList* temp = clist; clist = nlist; nlist = temp;
         current++;
     }
     
-    // Uç senaryo: Belki kelimenin tam bittiği yerde (EOF) Match düğümü kalmıştır
     for (int i = 0; i < clist->count; i++) {
-        if (clist->states[i]->type == stateMatch) {
-            matched = true;
-            break;
+        if (clist->threads[i].state->type == stateMatch) {
+            matched = true; winningThread = &clist->threads[i]; break;
         }
     }
 
-end:
-    freeList(clist);
-    freeList(nlist);
+    // Eşleşme sağlandıysa, o anki klonun hafıza çantasını ekrana bastırır
+    if (matched && winningThread != NULL) {
+        printf("\n--- YAKALANAN GRUPLAR ---\n");
+        for (int g = 0; g <= ctx->groupCount; g++) {
+            const char* start = winningThread->captures[g * 2];
+            const char* end = winningThread->captures[g * 2 + 1];
+            if (start != NULL && end != NULL) {
+                int len = end - start;
+                printf("Grup %d: %.*s\n", g, len, start);
+            }
+        }
+        printf("-------------------------\n");
+    }
+
+    freeList(clist); freeList(nlist);
     return matched;
 }
 
-// Dışarıya açılan ana Regex çalıştırma fonksiyonu
 bool matchNfa(NfaContext* ctx, const char* text) {
     const char* current = text;
-    
-    // Metnin üzerinde kayarak Substring Search yapar
     do {
-        if (checkStateSet(ctx, current, text)) {
-            return true;
-        }
+        if (checkStateSet(ctx, current, text)) return true;
     } while (*current++ != '\0');
-    
     return false;
 }

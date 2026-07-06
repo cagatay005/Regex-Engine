@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include "lexer.h"
 
+#define MAX_CAPTURES 20
+
 // NFA dugumlerinin gorev tiplerini belirtir
 typedef enum {
     stateChar,
@@ -12,7 +14,8 @@ typedef enum {
     stateClass,
     stateAny,
     stateAnchorStart,
-    stateAnchorEnd
+    stateAnchorEnd,
+    stateSave
 } StateType;
 
 // NFA grafi uzerindeki tek bir baglanti noktasini temsil eder
@@ -21,6 +24,7 @@ typedef struct State {
     char value;          // type stateChar ise aranacak karakteri tutar
     bool classMask[256]; // kümeye dahil olan karakterler
     bool isNegativeClass; // negatif küme bayrağı
+    int saveId;           // Pozisyonun hangi slota kaydedileceği
     struct State* out;   // Birinci cikis durumunu gosterir
     struct State* out1;  // Ikinci cikis durumunu gosterir
     int lastListId;      // NFA gezinmesinde ayni dugume tekrar girilmesini onler
@@ -32,6 +36,7 @@ typedef struct {
     State** allStates;   // Bellekten temizlemek icin tum dugumlerin listesini tutar
     size_t stateCount;   // Olusturulan toplam dugum sayisini tutar
     size_t capacity;     // allStates dizisinin mevcut kapasitesini tutar
+    int groupCount;      // Toplam kaç parantez grubu oldugunu tutar
 } NfaContext;
 
 // Verilen regex metninden NFA makinesini insa eder

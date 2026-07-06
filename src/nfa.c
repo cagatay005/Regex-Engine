@@ -45,6 +45,13 @@ static State* createEpsilon(NfaContext* ctx) {
     return createState(ctx, stateSplit, '\0', NULL, NULL);
 }
 
+// Yakalama grupları için kayıt (Save) düğümü
+static State* createSaveState(NfaContext* ctx, int saveId, State* out) {
+    State* state = createState(ctx, stateSave, '\0', out, NULL);
+    state->saveId = saveId;
+    return state;
+}
+
 // Küme düğümü oluşturur
 static State* createClassState(NfaContext* ctx, bool* classMask, bool isNegativeClass, State* out) {
     State* state = createState(ctx, stateClass, '\0', out, NULL);
@@ -65,8 +72,22 @@ static Fragment parseAtom(NfaContext* ctx, LexerContext* lexer) {
         f.end = s;
     } else if (peek.type == tokenLparen) {
         getNextToken(lexer); // '(' sembolünü tüket
+        
+        ctx->groupCount++; // Yeni bir grup açıldığını bildir
+        int groupId = ctx->groupCount; 
+        
         f = parseExpression(ctx, lexer);
         getNextToken(lexer); // ')' sembolünü tüket
+        
+        // Başlangıç (2*id) ve Bitiş (2*id+1) için gizli kayıt düğümleri oluştur
+        State* startSave = createSaveState(ctx, groupId * 2, f.start);
+        State* endSave = createSaveState(ctx, groupId * 2 + 1, NULL);
+        
+        if (f.end != NULL) f.end->out = endSave;
+        else startSave->out = endSave;
+        
+        f.start = startSave;
+        f.end = endSave;
     } else if (peek.type == tokenClass) {
         Token token = getNextToken(lexer); // Küme token'ını tüket
         State* s = createClassState(ctx, token.classMask, token.isNegativeClass, NULL);
@@ -194,19 +215,23 @@ NfaContext* createNfa(const char* regexPattern) {
     ctx->allStates = NULL;
     ctx->stateCount = 0;
     ctx->capacity = 0;
+    ctx->groupCount = 0; // Grup sayacını sıfırla
 
     LexerContext lexer;
     initLexer(&lexer, regexPattern);
 
     Fragment f = parseExpression(ctx, &lexer);
 
+    // Group 0 için ana sarmalayıcılar
+    State* startSave = createSaveState(ctx, 0, f.start);
+    State* endSave = createSaveState(ctx, 1, NULL);
     State* matchState = createState(ctx, stateMatch, '\0', NULL, NULL);
-    if (f.end != NULL) {
-        f.end->out = matchState;
-        ctx->startState = f.start;
-    } else {
-        ctx->startState = matchState;
-    }
+
+    if (f.end != NULL) f.end->out = endSave;
+    else startSave->out = endSave;
+    
+    endSave->out = matchState;
+    ctx->startState = startSave;
 
     return ctx;
 }
