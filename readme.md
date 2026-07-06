@@ -34,7 +34,7 @@ This project is written in standard C99. You will need `gcc` and `make` (or `min
 ```bash
 git clone https://github.com/cagatay005/regex-engine.git
 cd regex-engine
-
+```
 **2. Compile the project:**
 _Using MinGW on Windows_
 ```bash
