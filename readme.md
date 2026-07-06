@@ -41,6 +41,7 @@ _Using MinGW on Windows_
 mingw32-make
 ```
 _(On Linux/Mac, simply run make depending on your Makefile setup)._
+
 **3. Run the engine:**
 ```bash
 ./regex_engine
