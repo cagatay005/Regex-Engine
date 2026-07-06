@@ -1,60 +1,108 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../include/nfa.h"
-#include "../include/matcher.h"
+#include <stdbool.h>
+#include "nfa.h"
 
-// Terminal için ANSI Renk Kodları
-#define COLOR_MATRIX_GREEN "\033[1;32m"
-#define COLOR_RESET "\033[0m"
+// İşletim sistemine (Windows veya Linux/Mac) göre bekleme ve temizleme komutlarını ayarla
+#ifdef _WIN32
+    #include <windows.h>
+    #define sleep_ms(ms) Sleep(ms)
+    #define clear_screen() system("cls")
+#else
+    #include <unistd.h>
+    #define sleep_ms(ms) usleep((ms) * 1000)
+    #define clear_screen() system("clear")
+#endif
 
-// fgets ile alınan metnin sonundaki alt satır (\n) karakterini temizler
-void stripNewline(char* str) {
-    size_t len = strlen(str);
-    if (len > 0 && str[len - 1] == '\n') {
-        str[len - 1] = '\0';
-    }
+// Dil seçeneğini tutan global değişken (Varsayılan: Türkçe)
+bool isEnglish = false;
+
+// Uygulama başlığını ekrana basan yardımcı fonksiyon
+void printHeader() {
+    clear_screen();
+    printf("==========================================\n");
+    printf("            REGEX ENGINE\n");
+    printf("==========================================\n\n");
 }
 
 int main() {
     char regexPattern[256];
-    char text[256];
+    char text[1024];
 
-    // Terminal boyama ve baslik
-    printf("%s", COLOR_MATRIX_GREEN);
-    printf("==========================================\n");
-    printf("               REGEX ENGINE\n");
-    printf("==========================================\n\n");
+    printHeader();
 
     while (1) {
-        printf("Regex Deseni Girin (Cikmak icin 'q'): ");
-        if (fgets(regexPattern, sizeof(regexPattern), stdin) == NULL) break;
-        stripNewline(regexPattern);
-
-        if (strcmp(regexPattern, "q") == 0) {
-            break;
-        }
-
-        printf("Eslesecek Metni Girin: ");
-        if (fgets(text, sizeof(text), stdin) == NULL) break;
-        stripNewline(text);
-
-        NfaContext* nfa = createNfa(regexPattern);
-        bool result = matchNfa(nfa, text);
-        
-        if (result) {
-            printf("SONUC: ESLESTI\n\n");
+        // Dile göre input mesajı
+        if (isEnglish) {
+            printf("\nEnter Regex ('q': quit, 'clear': clean, 'tr': Turkish): ");
         } else {
-            printf("SONUC: ESLESMEDI\n\n");
+            printf("\nRegex Deseni Girin ('q': cikis, 'clear': temizle, 'en': Ingilizce): ");
+        }
+        
+        if (fgets(regexPattern, sizeof(regexPattern), stdin) == NULL) break;
+        regexPattern[strcspn(regexPattern, "\n")] = 0; // Yeni satır karakterini temizle
+
+        // Çıkış Komutu
+        if (strcmp(regexPattern, "q") == 0) {
+            if (isEnglish) {
+                printf("\nExiting system...\n");
+            } else {
+                printf("\nSistemden cikiliyor...\n");
+            }
+            sleep_ms(1500); // 1.5 saniye (1500 milisaniye) bekle
+            break;          // Döngüyü kır ve programı kapat
         }
 
-        freeNfa(nfa);
+        // Ekranı Temizle Komutu
+        if (strcmp(regexPattern, "clear") == 0) {
+            printHeader();
+            continue; // Döngünün başına dön
+        }
+
+        // Ingilizceye Geç Komutu
+        if (strcmp(regexPattern, "en") == 0) {
+            isEnglish = true;
+            printf(">>> Language changed to English.\n");
+            continue;
+        }
+
+        // Türkçeye Geç Komutu
+        if (strcmp(regexPattern, "tr") == 0) {
+            isEnglish = false;
+            printf(">>> Dil Turkce olarak degistirildi.\n");
+            continue;
+        }
+
+        // Dile göre metin girişi mesajı
+        if (isEnglish) {
+            printf("Enter Text to Match: ");
+        } else {
+            printf("Eslesecek Metni Girin: ");
+        }
+        
+        if (fgets(text, sizeof(text), stdin) == NULL) break;
+        text[strcspn(text, "\n")] = 0;
+
+        // --- REGEX MOTORUNU ÇALIŞTIRIR ---
+        NfaContext* ctx = createNfa(regexPattern);
+        bool result = matchNfa(ctx, text);
+
+        // Dile göre sonuç çıktısı
+        if (result) {
+            if (isEnglish) {
+                printf("RESULT: MATCHED\n");
+            } else {
+                printf("SONUC: ESLESTI\n");
+            }
+        } else {
+            if (isEnglish) {
+                printf("RESULT: NO MATCH\n");
+            } else {
+                printf("SONUC: ESLESMEDI\n");
+            }
+        }
     }
 
-    printf("Sistemden cikiliyor...\n");
-    
-    // Uygulama kapanırken terminal rengini varsayılana döndürür
-    printf("%s", COLOR_RESET);
-    
     return 0;
 }
