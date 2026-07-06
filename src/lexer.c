@@ -20,6 +20,11 @@ static void expandQuantifier(LexerContext* lexer) {
             else if (lexer->input[targetStart] == '(') depth--;
             if (depth > 0) targetStart--;
         }
+    } else {
+        // Eğer hedef karakter bir kaçış dizisiyse (örneğin \d, \w, \s)
+        if (targetStart > 0 && lexer->input[targetStart - 1] == '\\') {
+            targetStart--; // Başlangıcı '\' işaretini de kapsayacak şekilde 1 birim geri çek
+        }
     }
     size_t targetLen = i - targetStart;
 
@@ -209,6 +214,12 @@ Token getNextToken(LexerContext* lexer) {
                 token.type = tokenChar;
                 token.value = '\\';
             }
+            break;
+        case '^':
+            token.type = tokenCaret;
+            break;
+        case '$':
+            token.type = tokenDollar;
             break;
         default:
             token.type = tokenChar;

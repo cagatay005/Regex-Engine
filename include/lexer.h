@@ -18,6 +18,8 @@ typedef enum {
     tokenRbrace,
     tokenClass,
     tokenDot,
+    tokenCaret,
+    tokenDollar,
     tokenEof
 } TokenType;
 

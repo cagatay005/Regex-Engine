@@ -1,66 +1,78 @@
-#include "matcher.h"
-#include <string.h>
+#include "nfa.h"
+#include <stdbool.h>
 
-// NFA üzerinde o anki durumdan itibaren metnin eşleşip eşleşmediğini kontrol eder.
-static bool checkState(State* state, const char* text) {
-    if (state == NULL) {
-        return false;
-    }
+// Eşleştirme algoritması
+// textStart: Çapalar (^) için metnin orijinal başlangıç adresini tutar
+static bool checkState(State* state, const char* text, const char* textStart) {
+    if (state == NULL) return false;
 
-    // Başarı durumuna ulaştıysa ve metin de tamamen bittiyse eşleşme sağlanmıştır
+    // Başarılı Eşleşme
     if (state->type == stateMatch) {
-        return *text == '\0'; // Sadece metnin sonuna gelindiyse true dön
+        return true; 
     }
 
-    // Karakter eşleşmesi gerektiren bir durumdaysa
-    if (state->type == stateChar) {
-        // Metnin sonuna gelmediyse ve karakterler uyuyorsa bir sonraki duruma geç
-        if (*text != '\0' && *text == state->value) {
-            return checkState(state->out, text + 1);
+    // ^ Çapası: Sıfır genişlikli kontrol
+    if (state->type == stateAnchorStart) {
+        if (text == textStart) {
+            // Metin ilerletilmeden sonraki duruma geçilir
+            return checkState(state->out, text, textStart); 
         }
         return false;
     }
 
-    // Nokta (.) Operatörü: Yeni satır (\n) hariç her şeyle eşleşir
+    // $ Çapası: Sıfır genişlikli kontrol
+    if (state->type == stateAnchorEnd) {
+        if (*text == '\0' || *text == '\n') {
+            return checkState(state->out, text, textStart); 
+        }
+        return false;
+    }
+
+    if (state->type == stateChar) {
+        if (*text != '\0' && *text == state->value) {
+            return checkState(state->out, text + 1, textStart);
+        }
+        return false;
+    }
+
     if (state->type == stateAny) {
         if (*text != '\0' && *text != '\n') {
-            return checkState(state->out, text + 1);
+            return checkState(state->out, text + 1, textStart);
         }
         return false;
     }
 
-    // Küme eşleşmesi gerektiren bir durumdaysa
     if (state->type == stateClass) {
         if (*text != '\0') {
             unsigned char c = (unsigned char)(*text);
-            bool isMatch = state->classMask[c]; // Karakter haritada var mı
-            
-            // Eğer negatif kümeyse [^...] sonucu tersine çevir
-            if (state->isNegativeClass) {
-                isMatch = !isMatch;
-            }
+            bool isMatch = state->classMask[c];
+            if (state->isNegativeClass) isMatch = !isMatch;
             
             if (isMatch) {
-                return checkState(state->out, text + 1);
+                return checkState(state->out, text + 1, textStart);
             }
         }
         return false;
     }
 
-    // İleride eklenecek olan dallanma (|) durumu için iki yolu da dene
     if (state->type == stateSplit) {
-        return checkState(state->out, text) || checkState(state->out1, text);
+        return checkState(state->out, text, textStart) || 
+               checkState(state->out1, text, textStart);
     }
 
     return false;
 }
 
-// Verilen NFA yapısının hedef metinle eşleşip eşleşmediğini kontrol eder.
+// Dışarıya açılan ana Regex çalıştırma fonksiyonu
 bool matchNfa(NfaContext* ctx, const char* text) {
-    if (ctx == NULL || ctx->startState == NULL) {
-        return false;
-    }
+    const char* current = text;
     
-    // NFA'nın başlangıç durumundan metni kontrol etmeye başla
-    return checkState(ctx->startState, text);
+    // Metnin üzerinde kayarak Substring Search yapar
+    do {
+        if (checkState(ctx->startState, current, text)) {
+            return true; // Herhangi bir yerde eşleşme yakalandı
+        }
+    } while (*current++ != '\0');
+    
+    return false;
 }

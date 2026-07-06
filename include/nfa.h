@@ -10,7 +10,9 @@ typedef enum {
     stateSplit,
     stateMatch,
     stateClass,
-    stateAny
+    stateAny,
+    stateAnchorStart,
+    stateAnchorEnd
 } StateType;
 
 // NFA grafi uzerindeki tek bir baglanti noktasini temsil eder
