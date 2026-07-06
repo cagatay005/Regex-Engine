@@ -31,10 +31,10 @@ The engine supports a wide range of standard regular expression operations:
 This project is written in standard C99. You will need `gcc` and `make` (or `mingw32-make` on Windows) installed on your system.
 
 **1. Clone the repository:**
-```bash
+
 git clone [https://github.com/cagatay005/regex-engine.git](https://github.com/cagatay005/regex-engine.git)
 cd regex-engine
-```
+
 **2. Compile the project:**
 _Using MinGW on Windows_
 ```bash
