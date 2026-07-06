@@ -45,4 +45,8 @@ NfaContext* createNfa(const char* regexPattern);
 // NFA yapisinin kullandigi tum bellegi temizler
 void freeNfa(NfaContext* ctx);
 
+// Dışarıya açılan fonksiyonlar
+NfaContext* createNfa(const char* regexPattern);
+bool matchNfa(NfaContext* ctx, const char* text);
+
 #endif

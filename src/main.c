@@ -4,9 +4,9 @@
 #include <stdbool.h>
 #include "nfa.h"
 
-// İşletim sistemine (Windows veya Linux/Mac) göre bekleme ve temizleme komutlarını ayarla
+// İşletim sistemine (Windows veya Linux/Mac) göre bekleme ve temizleme komutları
 #ifdef _WIN32
-    #include <windows.h>
+    void __stdcall Sleep(unsigned long); 
     #define sleep_ms(ms) Sleep(ms)
     #define clear_screen() system("cls")
 #else
@@ -15,15 +15,37 @@
     #define clear_screen() system("clear")
 #endif
 
-// Dil seçeneğini tutan global değişken (Varsayılan: Türkçe)
+// ANSI Renk Kodları (Matrix Yeşili)
+#define COLOR_GREEN "\033[1;32m"
+#define COLOR_RESET "\033[0m"
+
+// Dil seçeneğini tutan global değişken
 bool isEnglish = false;
 
-// Uygulama başlığını ekrana basan yardımcı fonksiyon
+// Uygulama başlığını ekrana basan fonksiyon
 void printHeader() {
     clear_screen();
+    printf("%s", COLOR_GREEN); // Yeşili Aktif Et!
     printf("==========================================\n");
     printf("            REGEX ENGINE\n");
     printf("==========================================\n\n");
+}
+
+// 'code' komutuyla çağrılan yardım menüsü
+void printCommands() {
+    printf("\n--- %s ---\n", isEnglish ? "COMMANDS" : "KOMUTLAR");
+    if (isEnglish) {
+        printf("  'code'  : Show this list\n");
+        printf("  'clear' : Clean the terminal\n");
+        printf("  'tr'    : Switch to Turkish\n");
+        printf("  'q'     : Quit system\n");
+    } else {
+        printf("  'code'  : Bu listeyi gosterir\n");
+        printf("  'clear' : Terminali temizler\n");
+        printf("  'en'    : Ingilizce diline gecer\n");
+        printf("  'q'     : Sistemden cikar\n");
+    }
+    printf("--------------------------\n");
 }
 
 int main() {
@@ -33,48 +55,53 @@ int main() {
     printHeader();
 
     while (1) {
-        // Dile göre input mesajı
+        // Artık çok daha sade bir giriş mesajımız var
         if (isEnglish) {
-            printf("\nEnter Regex ('q': quit, 'clear': clean, 'tr': Turkish): ");
+            printf("\nEnter Regex ('code' for cmds): ");
         } else {
-            printf("\nRegex Deseni Girin ('q': cikis, 'clear': temizle, 'en': Ingilizce): ");
+            printf("\nRegex Deseni Girin ('code' ile komutlar): ");
         }
         
         if (fgets(regexPattern, sizeof(regexPattern), stdin) == NULL) break;
-        regexPattern[strcspn(regexPattern, "\n")] = 0; // Yeni satır karakterini temizle
+        regexPattern[strcspn(regexPattern, "\n")] = 0; 
 
-        // Çıkış Komutu
+        // 1. KOMUT: Çıkış (Quit)
         if (strcmp(regexPattern, "q") == 0) {
             if (isEnglish) {
                 printf("\nExiting system...\n");
             } else {
                 printf("\nSistemden cikiliyor...\n");
             }
-            sleep_ms(1500); // 1.5 saniye (1500 milisaniye) bekle
-            break;          // Döngüyü kır ve programı kapat
+            sleep_ms(1500); 
+            break;          
         }
 
-        // Ekranı Temizle Komutu
+        // 2. KOMUT: Ekranı Temizle (Clear)
         if (strcmp(regexPattern, "clear") == 0) {
             printHeader();
-            continue; // Döngünün başına dön
+            continue; 
         }
 
-        // Ingilizceye Geç Komutu
+        // 3. KOMUT: İngilizceye Geç (en)
         if (strcmp(regexPattern, "en") == 0) {
             isEnglish = true;
             printf(">>> Language changed to English.\n");
             continue;
         }
 
-        // Türkçeye Geç Komutu
+        // 4. KOMUT: Türkçeye Geç (tr)
         if (strcmp(regexPattern, "tr") == 0) {
             isEnglish = false;
             printf(">>> Dil Turkce olarak degistirildi.\n");
             continue;
         }
 
-        // Dile göre metin girişi mesajı
+        // 5. KOMUT: Komutları Listele (code)
+        if (strcmp(regexPattern, "code") == 0) {
+            printCommands();
+            continue;
+        }
+
         if (isEnglish) {
             printf("Enter Text to Match: ");
         } else {
@@ -84,11 +111,9 @@ int main() {
         if (fgets(text, sizeof(text), stdin) == NULL) break;
         text[strcspn(text, "\n")] = 0;
 
-        // --- REGEX MOTORUNU ÇALIŞTIRIR ---
         NfaContext* ctx = createNfa(regexPattern);
         bool result = matchNfa(ctx, text);
 
-        // Dile göre sonuç çıktısı
         if (result) {
             if (isEnglish) {
                 printf("RESULT: MATCHED\n");
@@ -104,5 +129,7 @@ int main() {
         }
     }
 
+    // Uygulama kapanırken terminalin rengini varsayılana döndür
+    printf("%s", COLOR_RESET);
     return 0;
 }
