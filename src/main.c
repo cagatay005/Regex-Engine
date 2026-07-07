@@ -109,6 +109,17 @@ int main() {
         text[strcspn(text, "\n")] = 0;
 
         NfaContext* ctx = createNfa(regexPattern);
+
+        // Hata Yakalama
+        if (ctx == NULL) {
+            if (isEnglish) {
+                printf(">>> SYNTAX ERROR: Unsupported or invalid Regex pattern!\n");
+            } else {
+                printf(">>> SOZDIZIMI HATASI: Desteklenmeyen veya hatali bir Regex deseni girdiniz!\n");
+            }
+            continue; // Döngüyü başa sar, yeni desen iste
+        }
+
         bool result = matchNfa(ctx, text);
 
         if (result) {

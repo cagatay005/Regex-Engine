@@ -222,6 +222,12 @@ NfaContext* createNfa(const char* regexPattern) {
 
     Fragment f = parseExpression(ctx, &lexer);
 
+    // Eğer ayrıştırıcı bilmediği bir sembol yüzünden düğüm oluşturamadıysa
+    if (f.start == NULL || f.end == NULL) {
+        free(ctx);
+        return NULL; // Çökmek yerine NULL döndür
+    }
+
     // Group 0 için ana sarmalayıcılar
     State* startSave = createSaveState(ctx, 0, f.start);
     State* endSave = createSaveState(ctx, 1, NULL);
