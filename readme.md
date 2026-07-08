@@ -13,6 +13,7 @@ Unlike standard recursive backtracking engines that suffer from exponential time
 *   **Pike VM (State-Set Matching):** Traverses the NFA using parallel states, eliminating the need for backtracking.
 *   **Capture Groups & Extraction:** Fully supports data extraction via capture groups `(...)` with industry-standard **Greedy Matching**.
 *   **Custom CLI:** An interactive, Matrix-Green styled terminal interface with multilingual support.
+* **Fault-Tolerant Parser (Error Recovery):** Implements a modern error-recovery architecture using non-capturing groups `(?:...)` to prevent buffer overflows during macro expansions (e.g., `{n,m}`). It elegantly catches syntax errors like unclosed brackets or dangling quantifiers without causing segmentation faults, returning a safe error state instead.
 
 ## Supported Regex Syntax
 
@@ -78,6 +79,7 @@ Karmaşık desenlerde üstel (exponential) zaman karmaşıklığı çöküşleri
 *   **Pike VM (Durum-Kümesi Eşleştirme):** Geri dönme (backtracking) ihtiyacını ortadan kaldırarak NFA üzerinde paralel klonlarla ilerler.
 *   **Grup Yakalama ve Veri Ayıklama:** Parantez `(...)` yapılarıyla metin ayıklamayı ve endüstri standardı olan **Açgözlü Eşleşme (Greedy Matching)** mantığını tam olarak destekler.
 *   **Gelişmiş CLI:** Çoklu dil desteğine sahip, Matrix Yeşili temalı interaktif bir terminal arayüzü sunar.
+* **Hata Toleranslı Ayrıştırıcı (Error Recovery):** Makro genişletmelerinde (örn. `{n,m}`) arabellek taşmalarını (buffer overflow) önlemek için yakalamayan grupları `(?:...)` kullanan modern bir mimari içerir. Kapatılmamış parantezler veya geçersiz kuantörler gibi sözdizimi hatalarında programın çökmesini (segmentation fault) engeller ve hatayı güvenle sönümleyerek kullanıcıya bildirir.
 
 ## Desteklenen Regex Sözdizimi (Syntax)
 
