@@ -46,7 +46,12 @@ static void addThread(ThreadList* l, State* s, const char** captures, int listId
     if (s->type == stateSave) {
         const char* oldCaptures[MAX_CAPTURES];
         memcpy(oldCaptures, captures, sizeof(const char*) * MAX_CAPTURES);
-        oldCaptures[s->saveId] = text; 
+        // Savunma amaçlı sınır kontrolü: createNfa grup sayısını zaten MAX_CAPTURES'a
+        // göre denetliyor, ama burada bir daha kontrol etmek dizi taşmasını (ve
+        // olası çökmeyi) hiçbir koşulda mümkün kılmıyor.
+        if (s->saveId >= 0 && s->saveId < MAX_CAPTURES) {
+            oldCaptures[s->saveId] = text;
+        }
         addThread(l, s->out, oldCaptures, listId, text, textStart);
         return;
     }
@@ -97,26 +102,34 @@ static bool checkStateSet(NfaContext* ctx, const char* text, const char* textSta
     bool matched = false;
     Thread* winningThread = NULL;
 
+    static Thread bestMatch; // Kazanan thread'in hafızası, döngü devam edince kaybolmasın
+
     while (clist->count > 0) {
         listIdCounter++;
         nlist->count = 0;
+        bool matchedThisStep = false;
 
         for (int i = 0; i < clist->count; i++) {
             Thread* t = &clist->threads[i];
-            
+
             // Eşleşme bulunsa dahi döngü kırma
-            // O anki en uzun/en iyi eşleşmeyi winningThread'e kaydet, 
+            // O anki en uzun/en iyi eşleşmeyi winningThread'e kaydet,
             // ama diğer klonların daha uzun bir eşleşme bulma ihtimaline karşı çalışmaya devam et.
             if (t->state->type == stateMatch) {
-                matched = true;
-                // Kazanan thread'in hafızasını statik bir yere kopyala ki döngü devam edince kaybolmasın
-                static Thread bestMatch; 
-                bestMatch.state = t->state;
-                memcpy(bestMatch.captures, t->captures, sizeof(const char*) * MAX_CAPTURES);
-                winningThread = &bestMatch;
+                // Aynı adımda (aynı metin uzunluğunda) birden fazla thread eşleşirse,
+                // öncelik sırası clist içindeki sırayla belirlenir (ilk/en yüksek öncelikli
+                // thread kazanır). Bu adımda zaten bir eşleşme kaydedildiyse, daha düşük
+                // öncelikli sonraki eşleşmelerin üzerine yazmasına izin verme.
+                if (!matchedThisStep) {
+                    matchedThisStep = true;
+                    matched = true;
+                    bestMatch.state = t->state;
+                    memcpy(bestMatch.captures, t->captures, sizeof(const char*) * MAX_CAPTURES);
+                    winningThread = &bestMatch;
+                }
                 continue; // Bu klon hedefe ulaştı, ama diğer klonlar ilerlemeye devam eder
             }
-            
+
             if (isMatch(t->state, current)) {
                 addThread(nlist, t->state->out, t->captures, listIdCounter, current + 1, textStart);
             }

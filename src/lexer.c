@@ -5,10 +5,14 @@
 #include <stdlib.h>
 
 // {n,m} sözdizimini (a{2,4} -> aa(a|)(a|) gibi) NFA'nın anlayacağı primitiflere çevirir
-static void expandQuantifier(LexerContext* lexer) {
+// Geri dönüş: genişletme başarılıysa true, '{' geçersiz/hedefsiz ise false (lexer değişmeden kalır)
+static bool expandQuantifier(LexerContext* lexer) {
     size_t i = lexer->position;
     int n = 0, m = -1;
     bool hasComma = false;
+
+    // '{' metnin en başındaysa tekrar edilecek bir hedef yoktur (örn: "{5}")
+    if (i == 0) return false;
 
     // Hedeflenen önceki karakteri/grubu bul
     size_t targetStart = i - 1;
@@ -44,13 +48,16 @@ static void expandQuantifier(LexerContext* lexer) {
     }
     
     // Geçersiz format, işlemi iptal et
-    if (i >= lexer->length || lexer->input[i] != '}') return;
+    if (i >= lexer->length || lexer->input[i] != '}') return false;
     
     // Eğer m yazılmadıysa (örn {3})
     if (!hasComma) m = n;
 
-    // Yeni regex için bellek ayır
-    size_t maxNewLen = lexer->length + (m == -1 ? n : m) * (targetLen + 5) + 10;
+    // Geçersiz aralık: minimum, maksimumdan büyük olamaz (örn: a{2,1})
+    if (m != -1 && m < n) return false;
+
+    // Yeni regex için bellek ayır ("(?:" + hedef + "|" + ")" = targetLen + 7 payı ile)
+    size_t maxNewLen = lexer->length + (m == -1 ? n : m) * (targetLen + 7) + 16;
     char* newRegex = (char*)malloc(maxNewLen);
     
     // Şablonun sol tarafını kopyala (hedef kısım hariç)
@@ -69,10 +76,12 @@ static void expandQuantifier(LexerContext* lexer) {
         destIdx += targetLen;
         newRegex[destIdx++] = '*';
     } 
-    // M kere opsiyonel kopyala
+    // M kere opsiyonel kopyala (yakalamayan grup olarak, capture slotlarını tüketmesin)
     else if (m > n) {
         for (int k = n; k < m; k++) {
             newRegex[destIdx++] = '(';
+            newRegex[destIdx++] = '?';
+            newRegex[destIdx++] = ':';
             strncpy(newRegex + destIdx, lexer->input + targetStart, targetLen);
             destIdx += targetLen;
             newRegex[destIdx++] = '|';
@@ -83,12 +92,17 @@ static void expandQuantifier(LexerContext* lexer) {
     // Şablonun sağ tarafını (süslü parantezden sonrasını) kopyala
     strcpy(newRegex + destIdx, lexer->input + i + 1);
 
+    // Önceki genişletmeden kalan (strdup'lanmış) belleği sızdırmadan serbest bırak
+    if (lexer->ownsInput) free((char*)lexer->input);
+
     // Orijinal lexer dizgisini değiştir ve pozisyonu hedef başlangıcına çek
     lexer->input = strdup(newRegex);
     lexer->length = strlen(newRegex);
     lexer->position = targetStart;
-    
+    lexer->ownsInput = true;
+
     free(newRegex);
+    return true;
 }
 
 // Lexer yapısının başlangıç değerlerini atar.
@@ -96,12 +110,14 @@ void initLexer(LexerContext* lexer, const char* input) {
     lexer->input = input;
     lexer->position = 0;
     lexer->length = strlen(input);
+    lexer->ownsInput = false;
 }
 
 // Metndeki sıradaki karakteri okuyarak ilgili token'ı oluşturur ve döndürür.
 Token getNextToken(LexerContext* lexer) {
     Token token;
     token.value = '\0';
+    token.isError = false;
 
     if (lexer->position >= lexer->length) {
         token.type = tokenEof;
@@ -114,8 +130,14 @@ Token getNextToken(LexerContext* lexer) {
     // Eğer süslü parantez açıldıysa makroyu tetikle
     if (currentChar == '{') {
         lexer->position--; // { işaretine geri dön
-        expandQuantifier(lexer); // Yeni şablonu çöz
-        return getNextToken(lexer); // Yeni şablon üzerinden baştan oku
+        if (expandQuantifier(lexer)) { // Yeni şablonu çöz
+            return getNextToken(lexer); // Yeni şablon üzerinden baştan oku
+        }
+        // Genişletme başarısız (hedefsiz veya hatalı {..}) - '{' karakterini
+        // düz bir token olarak tüket ki lexer takılmasın, ayrıştırıcı bunu hata sayacak
+        lexer->position++;
+        token.type = tokenLbrace;
+        return token;
     }
 
     switch (currentChar) {
@@ -138,7 +160,15 @@ Token getNextToken(LexerContext* lexer) {
             token.type = tokenPipe;
             break;
         case '(':
-            token.type = tokenLparen;
+            // Yakalamayan grup söz dizimi: "(?:"
+            if (lexer->position + 1 < lexer->length &&
+                lexer->input[lexer->position] == '?' &&
+                lexer->input[lexer->position + 1] == ':') {
+                lexer->position += 2; // '?:' işaretlerini tüket
+                token.type = tokenNCLparen;
+            } else {
+                token.type = tokenLparen;
+            }
             break;
         case ')':
             token.type = tokenRparen;
@@ -173,6 +203,9 @@ Token getNextToken(LexerContext* lexer) {
             // ']' işaretini tüket
             if (lexer->position < lexer->length && lexer->input[lexer->position] == ']') {
                 lexer->position++;
+            } else {
+                // Kapanmamış küme (örn: "[abc"): ']' bulunamadı, sözdizimi hatası
+                token.isError = true;
             }
             break;
         case '.':
@@ -210,9 +243,10 @@ Token getNextToken(LexerContext* lexer) {
                     token.value = nextChar;
                 }
             } else {
-                // Metnin en sonunda tek başına '\' kaldıysa normal karakter say
+                // Metnin en sonunda tek başına '\' kaldı: eksik kaçış dizisi, sözdizimi hatası
                 token.type = tokenChar;
                 token.value = '\\';
+                token.isError = true;
             }
             break;
         case '^':

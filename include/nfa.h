@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include "lexer.h"
 
-#define MAX_CAPTURES 20
+#define MAX_CAPTURES 64
 
 // NFA dugumlerinin gorev tiplerini belirtir
 typedef enum {
@@ -37,6 +37,7 @@ typedef struct {
     size_t stateCount;   // Olusturulan toplam dugum sayisini tutar
     size_t capacity;     // allStates dizisinin mevcut kapasitesini tutar
     int groupCount;      // Toplam kaç parantez grubu oldugunu tutar
+    bool hasError;       // Ayrıştırma sırasında sözdizimi hatası bulunduysa true olur
 } NfaContext;
 
 // Verilen regex metninden NFA makinesini insa eder

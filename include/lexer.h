@@ -13,6 +13,7 @@ typedef enum {
     tokenQuestion,
     tokenPipe,
     tokenLparen,
+    tokenNCLparen, // Yakalamayan (non-capturing) grup baslangici: "(?:"
     tokenRparen,
     tokenLbrace,
     tokenRbrace,
@@ -29,6 +30,7 @@ typedef struct {
     char value;
     bool classMask[256];
     bool isNegativeClass;
+    bool isError; // Token hatali/eksik olustuysa (orn: kapanmamis kume "[abc") true olur
 } Token;
 
 // Lexer'ın metin üzerindeki anlık durumunu tutar
@@ -36,6 +38,7 @@ typedef struct {
     const char* input;
     size_t position;
     size_t length;
+    bool ownsInput; // input alanı expandQuantifier tarafından strdup'landıysa true olur
 } LexerContext;
 
 // Lexer yapısının başlangıç değerlerini atar

@@ -67,6 +67,7 @@ static Fragment parseAtom(NfaContext* ctx, LexerContext* lexer) {
     
     if (peek.type == tokenChar) {
         Token token = getNextToken(lexer); // Karakteri güvenle tüket
+        if (token.isError) ctx->hasError = true; // örn: sonda kalan tek başına '\'
         State* s = createState(ctx, stateChar, token.value, NULL, NULL);
         f.start = s;
         f.end = s;
@@ -77,8 +78,11 @@ static Fragment parseAtom(NfaContext* ctx, LexerContext* lexer) {
         int groupId = ctx->groupCount; 
         
         f = parseExpression(ctx, lexer);
-        getNextToken(lexer); // ')' sembolünü tüket
-        
+        Token closeParen = getNextToken(lexer); // ')' sembolünü tüket
+        if (closeParen.type != tokenRparen) {
+            ctx->hasError = true; // Kapanmamış parantez, örn: "(abc"
+        }
+
         // Başlangıç (2*id) ve Bitiş (2*id+1) için gizli kayıt düğümleri oluştur
         State* startSave = createSaveState(ctx, groupId * 2, f.start);
         State* endSave = createSaveState(ctx, groupId * 2 + 1, NULL);
@@ -88,8 +92,20 @@ static Fragment parseAtom(NfaContext* ctx, LexerContext* lexer) {
         
         f.start = startSave;
         f.end = endSave;
+    } else if (peek.type == tokenNCLparen) {
+        getNextToken(lexer); // '(?:' sembollerini tüket
+
+        // Yakalamayan grup: save-state ekleme, groupCount'u artırma.
+        // {n,m} genişletmesinin ürettiği iç içe geçmiş "(?:x|)" sarmalayıcıları
+        // bu sayede capture slotlarını tüketmez.
+        f = parseExpression(ctx, lexer);
+        Token closeParen = getNextToken(lexer); // ')' sembolünü tüket
+        if (closeParen.type != tokenRparen) {
+            ctx->hasError = true; // Kapanmamış parantez, örn: "(?:abc"
+        }
     } else if (peek.type == tokenClass) {
         Token token = getNextToken(lexer); // Küme token'ını tüket
+        if (token.isError) ctx->hasError = true; // örn: kapanmamış küme "[abc"
         State* s = createClassState(ctx, token.classMask, token.isNegativeClass, NULL);
         f.start = s;
         f.end = s;
@@ -108,15 +124,27 @@ static Fragment parseAtom(NfaContext* ctx, LexerContext* lexer) {
         State* s = createState(ctx, stateAnchorEnd, '\0', NULL, NULL);
         f.start = s;
         f.end = s;
+    } else if (peek.type == tokenEof || peek.type == tokenRparen || peek.type == tokenPipe) {
+        // Boş alt-ifade: "()", "a|" veya "|a" gibi durumlarda burada tüketilecek
+        // bir şey yok; boş fragment'ı olduğu gibi yukarı döndürür.
+    } else {
+        // '*', '+', '?', '{', '}' gibi önünde atomu olmayan veya tanınmayan bir sembol.
+        // İlerlemeyi garanti altına almak için tüket ve sözdizimi hatası olarak işaretle.
+        getNextToken(lexer);
+        ctx->hasError = true;
     }
-        
+
     return f;
 }
 
 // '*' ve '+' gibi tekrar operatörlerini işler
 static Fragment parseRepetition(NfaContext* ctx, LexerContext* lexer) {
     Fragment f = parseAtom(ctx, lexer);
-    
+
+    // Atom hiç üretilemediyse (boş alt-ifade ya da sözdizimi hatası), üzerine
+    // tekrar operatörü uygulamaya kalkışma - "nothing to repeat" durumu.
+    if (f.start == NULL) return f;
+
     Token peek = peekToken(lexer);
     if (peek.type == tokenStar) {
         getNextToken(lexer); // '*' sembolünü tüket
@@ -173,8 +201,16 @@ static Fragment parseConcat(NfaContext* ctx, LexerContext* lexer) {
         }
         
         Fragment next = parseRepetition(ctx, lexer);
-        f.end->out = next.start;
-        f.end = next.end;
+
+        if (f.start == NULL) {
+            // Birikmiş parça boş/hatalıysa akışı kırmadan bir sonrakini benimse
+            f = next;
+        } else if (next.start != NULL) {
+            f.end->out = next.start;
+            f.end = next.end;
+        }
+        // next.start == NULL ise (hatalı/boş parça) yut ve devam et;
+        // lexer zaten ilerledi, sonsuz döngü riski yok.
     }
     return f;
 }
@@ -216,16 +252,36 @@ NfaContext* createNfa(const char* regexPattern) {
     ctx->stateCount = 0;
     ctx->capacity = 0;
     ctx->groupCount = 0; // Grup sayacını sıfırla
+    ctx->hasError = false;
 
     LexerContext lexer;
     initLexer(&lexer, regexPattern);
 
     Fragment f = parseExpression(ctx, &lexer);
 
-    // Eğer ayrıştırıcı bilmediği bir sembol yüzünden düğüm oluşturamadıysa
-    if (f.start == NULL || f.end == NULL) {
-        free(ctx);
-        return NULL; // Çökmek yerine NULL döndür
+    // Yakalama grubu sayısı MAX_CAPTURES sınırını aşıyorsa güvenle reddet.
+    // {n,m} genişletmesi (özellikle "{n,m}" aralıklı olanlar) her kullanımda
+    // gizli parantez/grup oluşturduğundan, kullanıcının yazdığından çok daha
+    // fazla grup ortaya çıkabilir ve sabit boyutlu captures[] dizisini taşırabilir.
+    if ((ctx->groupCount + 1) * 2 > MAX_CAPTURES) {
+        ctx->hasError = true;
+    }
+
+    // Ayrıştırma bitmesine rağmen ortada tüketilmemiş token kaldıysa
+    // (örn: "abc)" içindeki fazladan ')') bu da bir sözdizimi hatasıdır.
+    if (peekToken(&lexer).type != tokenEof) {
+        ctx->hasError = true;
+    }
+
+    // expandQuantifier tarafından strdup'lanmış olabilecek belleği temizle
+    if (lexer.ownsInput) free((char*)lexer.input);
+
+    // Ayrıştırıcı bilmediği bir sembol ya da sözdizimi hatası yüzünden
+    // geçerli bir NFA kuramadıysa, o ana kadar oluşturulan tüm düğümleri
+    // temizleyip çökmek yerine NULL döndür.
+    if (f.start == NULL || f.end == NULL || ctx->hasError) {
+        freeNfa(ctx);
+        return NULL;
     }
 
     // Group 0 için ana sarmalayıcılar
